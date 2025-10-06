@@ -1,0 +1,123 @@
+# Heimdall Routing Configuration Example
+# This file demonstrates all features of the YAML-based routing configuration
+
+# Global settings apply to all entities unless overridden
+global:
+  # Stop evaluation after first matching rule (default: false)
+  stop_on_first_match: false
+
+  # Enable routing metrics and logging (default: false)
+  enable_metrics: true
+
+  # Default messaging provider when not specified in destinations
+  default_provider: "kafka"
+
+# Provider configurations (optional, for documentation/validation)
+providers:
+  kafka:
+    type: kafka
+    enabled: true
+    connection:
+      bootstrap_servers: ["localhost:9092"]
+
+  rabbitmq:
+    type: rabbitmq
+    enabled: true
+    connection:
+      url: "amqp://guest:guest@localhost:5672/"
+      exchange: "heimdall.events"
+
+# Entity-specific routing configurations
+entities:
+  # Dinosaur entity routing
+  dinosaur:
+    # Override default provider for all dinosaur routes
+    default_provider: "kafka"
+
+    routing_rules:
+      # Route newly validated dinosaurs for scoring
+      - name: "route_unscored_dinosaurs"
+        priority: 10
+        condition:
+          expression: 'entity.species == "T-Rex" && entity.status == "validated" && !has(entity.score)'
+        publish:
+          - topic: "dinosaur.scoring.requests"
+            provider: "kafka"
+            headers:
+              x-source: "heimdall-routing"
+              x-entity-type: "dinosaur"
+
+      # Route active dinosaurs to monitoring
+      - name: "route_active_dinosaurs"
+        priority: 5
+        condition:
+          expression: 'entity.status == "active"'
+        publish:
+          - topic: "dinosaur.monitoring"
+            provider: "rabbitmq"
+
+      # Critical dinosaurs get special handling
+      - name: "route_critical_dinosaurs"
+        priority: 100
+        stop_on_match: true  # Don't evaluate other rules if this matches
+        condition:
+          expression: 'entity.critical == true || entity.threat_level == "high"'
+        publish:
+          - topic: "dinosaur.alerts.critical"
+            provider: "kafka"
+            headers:
+              x-priority: "critical"
+              x-alert: "true"
+          - topic: "dinosaur.alerts.backup"
+            provider: "rabbitmq"
+
+  # Habitat entity routing
+  habitat:
+    # This entity uses global default provider
+
+    routing_rules:
+      # Route available habitats
+      - name: "route_available_habitats"
+        priority: 10
+        condition:
+          expression: 'entity.available == true && entity.capacity > 0'
+        publish:
+          - topic: "habitat.available"
+          - topic: "habitat.matching.requests"
+            headers:
+              x-habitat-type: "available"
+
+      # Route habitats needing maintenance
+      - name: "route_maintenance_habitats"
+        priority: 20
+        condition:
+          expression: 'entity.status == "maintenance" || entity.last_inspection_days > 30'
+        publish:
+          - topic: "habitat.maintenance.requests"
+            headers:
+              x-maintenance-type: "scheduled"
+
+  # Feeding schedule entity routing
+  feeding:
+    default_provider: "rabbitmq"
+
+    routing_rules:
+      # Route urgent feeding schedules
+      - name: "route_urgent_feeding"
+        priority: 50
+        condition:
+          expression: 'entity.urgency == "high" && entity.time_overdue > 60'
+        publish:
+          - topic: "feeding.urgent"
+            provider: "kafka"  # Override entity default for urgent items
+            headers:
+              x-urgent: "true"
+
+      # Route regular feeding schedules
+      - name: "route_regular_feeding"
+        priority: 10
+        condition:
+          expression: 'entity.status == "scheduled"'
+        publish:
+          - topic: "feeding.scheduled"
+            # Uses entity default (rabbitmq)
