@@ -12,6 +12,8 @@ The routing engine provides CEL-based conditional message routing with support f
 
 ## Quick Start
 
+### Programmatic Configuration
+
 ```go
 package main
 
@@ -60,6 +62,190 @@ func main() {
 
     // destinations contains all matching routes
 }
+```
+
+### YAML Configuration
+
+Load routing rules from a YAML configuration file:
+
+```go
+package main
+
+import (
+    "context"
+    "github.com/ciaranRoche/heimdall-go/routing"
+)
+
+func main() {
+    // Load config from YAML file
+    config, err := routing.LoadConfigFromFile("routing.yaml")
+    if err != nil {
+        panic(err)
+    }
+
+    // Create engine with loaded config
+    engine, err := routing.NewEngine(config)
+    if err != nil {
+        panic(err)
+    }
+
+    // Route messages
+    msg := &routing.Message{
+        Topic: "dinosaur.events",
+        Entity: map[string]any{
+            "status":  "active",
+            "species": "T-Rex",
+        },
+    }
+
+    destinations, _ := engine.Route(context.Background(), msg)
+}
+```
+
+**routing.yaml:**
+```yaml
+global:
+  stop_on_first_match: false
+  enable_metrics: true
+  default_provider: "kafka"
+
+entities:
+  dinosaur:
+    routing_rules:
+      - name: "route-active-dinosaurs"
+        priority: 10
+        condition:
+          expression: 'entity.status == "active" && entity.species == "T-Rex"'
+        publish:
+          - topic: "dinosaur.scoring.requests"
+            provider: "kafka"
+```
+
+See [examples/config.yaml](../examples/config.yaml) for a complete configuration example.
+
+## YAML Configuration Reference
+
+### Global Settings
+
+```yaml
+global:
+  # Stop evaluation after first matching rule (default: false)
+  stop_on_first_match: false
+
+  # Enable routing metrics and logging (default: false)
+  enable_metrics: true
+
+  # Default provider when not specified in destinations
+  default_provider: "kafka"
+```
+
+### Entity-Specific Configuration
+
+Each entity can have its own routing rules and override global settings:
+
+```yaml
+entities:
+  dinosaur:
+    # Override global default provider for this entity
+    default_provider: "rabbitmq"
+
+    # Override stop_on_first_match for this entity
+    stop_on_first_match: true
+
+    routing_rules:
+      - name: "rule-name"
+        priority: 10
+        condition:
+          expression: 'entity.status == "active"'
+        publish:
+          - topic: "destination.topic"
+```
+
+### Provider Override Precedence
+
+Providers are resolved in this order (highest precedence first):
+
+1. **Destination-level** - Explicit provider in `publish.provider`
+2. **Entity-level** - Entity's `default_provider`
+3. **Global-level** - Global `default_provider`
+
+```yaml
+global:
+  default_provider: "kafka"  # Used if no other provider specified
+
+entities:
+  dinosaur:
+    default_provider: "rabbitmq"  # Overrides global for dinosaur
+
+    routing_rules:
+      - name: "example"
+        condition:
+          expression: "true"
+        publish:
+          - topic: "topic1"
+            # Uses entity default: rabbitmq
+
+          - topic: "topic2"
+            provider: "nats"
+            # Uses explicit provider: nats
+```
+
+### Routing Rules
+
+Each routing rule must have:
+- **name**: Unique identifier
+- **condition**: CEL expression that evaluates to boolean
+- **publish**: Array of destinations
+
+Optional fields:
+- **priority**: Evaluation order (higher = first, default: 0)
+- **stop_on_match**: Stop evaluation if this rule matches (default: false)
+
+```yaml
+routing_rules:
+  - name: "high-priority-rule"
+    priority: 100
+    stop_on_match: true
+    condition:
+      expression: 'entity.critical == true'
+    publish:
+      - topic: "alerts.critical"
+        provider: "kafka"
+        headers:
+          x-priority: "high"
+          x-alert: "true"
+```
+
+### Destinations
+
+Each destination configuration supports:
+
+```yaml
+publish:
+  - topic: "destination.topic"        # Required: destination topic/queue
+    provider: "kafka"                 # Optional: messaging provider
+    transform: "json_to_proto"        # Optional: transformation to apply
+    headers:                          # Optional: additional headers
+      x-source: "heimdall"
+      x-priority: "high"
+```
+
+### Multi-Destination Publishing
+
+A single rule can publish to multiple destinations (fan-out):
+
+```yaml
+routing_rules:
+  - name: "fan-out-critical"
+    condition:
+      expression: 'entity.critical == true'
+    publish:
+      - topic: "alerts.critical"
+        provider: "kafka"
+      - topic: "alerts.backup"
+        provider: "rabbitmq"
+      - topic: "monitoring.events"
+        provider: "nats"
 ```
 
 ## CEL Expressions
