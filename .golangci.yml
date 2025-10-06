@@ -1,0 +1,80 @@
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck      # Check for unchecked errors
+    - gosimple      # Simplify code
+    - govet         # Vet examines Go source code
+    - ineffassign   # Detect ineffectual assignments
+    - staticcheck   # Staticcheck is a go vet on steroids
+    - unused        # Check for unused constants, variables, functions
+    - gofmt         # Check code is formatted
+    - goimports     # Check imports are formatted
+    - misspell      # Detect misspelled words
+    - unparam       # Check for unused function parameters
+    - unconvert     # Remove unnecessary type conversions
+    - goconst       # Find repeated strings that could be constants
+    - gocyclo       # Computes cyclomatic complexity
+    - dupl          # Code clone detection
+    - gosec         # Security issues
+    - stylecheck    # Stylecheck is a replacement for golint
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  govet:
+    enable-all: true
+    disable:
+      - shadow
+
+  gocyclo:
+    min-complexity: 15
+
+  dupl:
+    threshold: 100
+
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+
+  misspell:
+    locale: US
+
+  unparam:
+    check-exported: false
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - goconst
+
+    # Ignore long lines in examples
+    - path: examples/
+      linters:
+        - lll
+
+    # Allow init functions in provider packages for registration
+    - path: provider/
+      text: "init functions are discouraged"
+      linters:
+        - gochecknoinits
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
