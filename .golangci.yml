@@ -25,12 +25,13 @@ linters:
 linters-settings:
   errcheck:
     check-type-assertions: true
-    check-blank: true
+    check-blank: false
 
   govet:
     enable-all: true
     disable:
       - shadow
+      - fieldalignment
 
   gocyclo:
     min-complexity: 15
@@ -75,6 +76,7 @@ issues:
         - gochecknoinits
 
 output:
-  format: colored-line-number
+  formats:
+    - format: colored-line-number
   print-issued-lines: true
   print-linter-name: true

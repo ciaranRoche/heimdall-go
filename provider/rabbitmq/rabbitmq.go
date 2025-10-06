@@ -18,7 +18,6 @@ type Provider struct {
 	config     map[string]interface{}
 	connection *amqp.Connection
 	channel    *amqp.Channel
-	queue      amqp.Queue
 	exchange   string
 	mu         sync.RWMutex
 	done       chan bool
@@ -67,7 +66,7 @@ func NewProvider(config map[string]interface{}) (provider.Provider, error) {
 	// Create channel
 	ch, err := conn.Channel()
 	if err != nil {
-		conn.Close()
+		_ = conn.Close() // Best effort cleanup
 		return nil, fmt.Errorf("failed to open channel: %w", err)
 	}
 
@@ -87,8 +86,8 @@ func NewProvider(config map[string]interface{}) (provider.Provider, error) {
 		nil,     // arguments
 	)
 	if err != nil {
-		ch.Close()
-		conn.Close()
+		_ = ch.Close()   // Best effort cleanup
+		_ = conn.Close() // Best effort cleanup
 		return nil, fmt.Errorf("failed to declare exchange: %w", err)
 	}
 
@@ -100,8 +99,8 @@ func NewProvider(config map[string]interface{}) (provider.Provider, error) {
 		false,         // global
 	)
 	if err != nil {
-		ch.Close()
-		conn.Close()
+		_ = ch.Close()   // Best effort cleanup
+		_ = conn.Close() // Best effort cleanup
 		return nil, fmt.Errorf("failed to set QoS: %w", err)
 	}
 
@@ -124,10 +123,8 @@ func (p *Provider) Publish(ctx context.Context, topic string, data []byte, heade
 
 	// Build AMQP headers
 	amqpHeaders := amqp.Table{}
-	if headers != nil {
-		for k, v := range headers {
-			amqpHeaders[k] = v
-		}
+	for k, v := range headers {
+		amqpHeaders[k] = v
 	}
 
 	// Create publishing
@@ -268,17 +265,21 @@ func (p *Provider) processMessages(ctx context.Context, topic string, msgs <-cha
 
 				// Reject message if not auto-ack
 				if !autoAck {
-					msg.Reject(false) // Don't requeue
+					if rejectErr := msg.Reject(false); rejectErr != nil {
+						log.Printf("RabbitMQ Provider: Failed to reject message: %v", rejectErr)
+					}
 				}
 			} else {
 				// Acknowledge message if not auto-ack
 				if !autoAck {
-					msg.Ack(false)
+					if ackErr := msg.Ack(false); ackErr != nil {
+						log.Printf("RabbitMQ Provider: Failed to ack message: %v", ackErr)
+					}
 				}
 			}
 
 		case <-ctx.Done():
-			log.Printf("RabbitMQ Provider: Context cancelled for topic: %s", topic)
+			log.Printf("RabbitMQ Provider: Context canceled for topic: %s", topic)
 			return
 
 		case <-p.done:

@@ -1,4 +1,7 @@
-.PHONY: help test test-coverage build clean fmt lint vet install-tools examples
+# Include bingo-managed tool binaries
+include .bingo/Variables.mk
+
+.PHONY: help test test-coverage build clean fmt lint vet examples
 
 # Default target
 help:
@@ -9,9 +12,8 @@ help:
 	@echo "  make build            - Build example applications"
 	@echo "  make clean            - Remove build artifacts"
 	@echo "  make fmt              - Format code"
-	@echo "  make lint             - Run linter"
+	@echo "  make lint             - Run linter (using bingo-managed golangci-lint)"
 	@echo "  make vet              - Run go vet"
-	@echo "  make install-tools    - Install development tools"
 	@echo "  make examples         - Build all examples"
 
 # Run tests
@@ -47,25 +49,18 @@ fmt:
 	@echo "Formatting code..."
 	go fmt ./...
 
-# Run linter
-lint:
+# Run linter (bingo auto-installs correct version if needed)
+lint: $(GOLANGCI_LINT)
 	@echo "Running linter..."
-	@which golangci-lint > /dev/null || (echo "golangci-lint not found, run 'make install-tools'" && exit 1)
-	golangci-lint run ./...
+	@$(GOLANGCI_LINT) run ./...
 
 # Run go vet
 vet:
 	@echo "Running go vet..."
 	go vet ./...
 
-# Install development tools
-install-tools:
-	@echo "Installing development tools..."
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	@echo "Tools installed"
-
 # Run all checks before commit
-precommit: fmt vet test
+precommit: fmt vet lint test
 	@echo "Pre-commit checks passed!"
 
 # Update dependencies

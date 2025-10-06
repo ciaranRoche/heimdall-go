@@ -35,11 +35,11 @@ import (
 // It provides a unified interface for publishing and consuming messages
 // across different messaging providers.
 type Heimdall struct {
-	provider   provider.Provider
-	config     *Config
-	mu         sync.RWMutex
-	consumers  map[string]context.CancelFunc
-	closed     bool
+	provider  provider.Provider
+	config    *Config
+	mu        sync.RWMutex
+	consumers map[string]context.CancelFunc
+	closed    bool
 }
 
 // Message represents a message received from a messaging provider.
@@ -139,7 +139,7 @@ func (h *Heimdall) Publish(ctx context.Context, topic string, data []byte, opts 
 // Subscribe starts consuming messages from the specified topic/queue.
 //
 // The handler function will be called for each message received.
-// Subscription runs in a background goroutine and can be cancelled via the
+// Subscription runs in a background goroutine and can be canceled via the
 // returned cancel function or by calling Close() on the Heimdall instance.
 //
 // Example:

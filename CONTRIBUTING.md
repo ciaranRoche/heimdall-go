@@ -33,14 +33,11 @@ By participating in this project, you agree to maintain a respectful and inclusi
 go mod download
 ```
 
-### Install Development Tools
+### Development Tools
 
-```bash
-make install-tools
-```
+Development tools like `golangci-lint` are managed by [bingo](https://github.com/bwplotka/bingo) and will be automatically installed at the correct version when you run commands like `make lint`. No manual installation needed!
 
-This installs:
-- `golangci-lint` for linting
+Tool versions are pinned in `.bingo/` directory to ensure consistency across the team.
 
 ## Making Changes
 
@@ -224,6 +221,51 @@ To add a new messaging provider:
 4. **Add tests**: `provider/yourprovider/yourprovider_test.go`
 5. **Add example**: `examples/yourprovider/`
 6. **Update documentation**: Add provider to README.md
+
+## Managing Development Tools with Bingo
+
+This project uses [bingo](https://github.com/bwplotka/bingo) to manage development tool versions. Tools are automatically installed at the correct version when needed.
+
+### Adding a New Tool
+
+To add a new development tool:
+
+```bash
+# Add latest version
+bingo get github.com/tool/name
+
+# Add specific version
+bingo get github.com/tool/name@v1.2.3
+```
+
+This creates:
+- `.bingo/tool.mod` - Go module for the tool
+- `.bingo/tool.sum` - Checksums for dependencies
+- Updates `.bingo/Variables.mk` - Makefile variables
+
+### Using Tools in Makefile
+
+Tools are available as make targets:
+
+```makefile
+# Add to target dependencies
+lint: $(GOLANGCI_LINT)
+	$(GOLANGCI_LINT) run ./...
+```
+
+The tool will be automatically installed at the pinned version if not present.
+
+### Updating Tool Versions
+
+```bash
+# Update to latest version
+bingo get github.com/tool/name@latest
+
+# Update to specific version
+bingo get github.com/tool/name@v2.0.0
+```
+
+Always commit `.bingo/` changes so the team uses the same tool versions.
 
 ## Documentation
 

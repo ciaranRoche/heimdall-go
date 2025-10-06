@@ -2,6 +2,7 @@ package heimdall
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 
 // mockProvider is a test implementation of provider.Provider
 type mockProvider struct {
+	mu              sync.Mutex
 	publishCalled   bool
 	subscribeCalled bool
 	closeCalled     bool
@@ -18,13 +20,19 @@ type mockProvider struct {
 }
 
 func (m *mockProvider) Publish(ctx context.Context, topic string, data []byte, headers map[string]interface{}, correlationID string) error {
+	m.mu.Lock()
 	m.publishCalled = true
-	return m.publishErr
+	err := m.publishErr
+	m.mu.Unlock()
+	return err
 }
 
 func (m *mockProvider) Subscribe(ctx context.Context, topic string, handler provider.MessageHandler) error {
+	m.mu.Lock()
 	m.subscribeCalled = true
-	return m.subscribeErr
+	err := m.subscribeErr
+	m.mu.Unlock()
+	return err
 }
 
 func (m *mockProvider) HealthCheck(ctx context.Context) error {
@@ -32,7 +40,9 @@ func (m *mockProvider) HealthCheck(ctx context.Context) error {
 }
 
 func (m *mockProvider) Close() error {
+	m.mu.Lock()
 	m.closeCalled = true
+	m.mu.Unlock()
 	return nil
 }
 
@@ -104,7 +114,11 @@ func TestHeimdall_Publish(t *testing.T) {
 		t.Errorf("Publish() error = %v", err)
 	}
 
-	if !mock.publishCalled {
+	mock.mu.Lock()
+	called := mock.publishCalled
+	mock.mu.Unlock()
+
+	if !called {
 		t.Error("Expected provider.Publish to be called")
 	}
 }
@@ -133,7 +147,11 @@ func TestHeimdall_PublishWithOptions(t *testing.T) {
 		t.Errorf("Publish() error = %v", err)
 	}
 
-	if !mock.publishCalled {
+	mock.mu.Lock()
+	called := mock.publishCalled
+	mock.mu.Unlock()
+
+	if !called {
 		t.Error("Expected provider.Publish to be called")
 	}
 }
@@ -161,7 +179,11 @@ func TestHeimdall_Subscribe(t *testing.T) {
 		t.Errorf("Subscribe() error = %v", err)
 	}
 
-	if !mock.subscribeCalled {
+	mock.mu.Lock()
+	called := mock.subscribeCalled
+	mock.mu.Unlock()
+
+	if !called {
 		t.Error("Expected provider.Subscribe to be called")
 	}
 
@@ -210,7 +232,11 @@ func TestHeimdall_Close(t *testing.T) {
 		t.Errorf("Close() error = %v", err)
 	}
 
-	if !mock.closeCalled {
+	mock.mu.Lock()
+	called := mock.closeCalled
+	mock.mu.Unlock()
+
+	if !called {
 		t.Error("Expected provider.Close to be called")
 	}
 
@@ -343,6 +369,14 @@ func TestMessage(t *testing.T) {
 	if msg.CorrelationID != "test-123" {
 		t.Errorf("Expected correlation ID 'test-123', got '%s'", msg.CorrelationID)
 	}
+
+	if msg.Headers["key"] != "value" {
+		t.Errorf("Expected header 'key' to be 'value', got '%v'", msg.Headers["key"])
+	}
+
+	if msg.Metadata["meta"] != "data" {
+		t.Errorf("Expected metadata 'meta' to be 'data', got '%v'", msg.Metadata["meta"])
+	}
 }
 
 func TestConcurrentOperations(t *testing.T) {
@@ -361,9 +395,9 @@ func TestConcurrentOperations(t *testing.T) {
 
 	// Test concurrent publishes
 	for i := 0; i < 10; i++ {
-		go func(i int) {
+		go func() {
 			_ = h.Publish(ctx, "test.topic", []byte("message"))
-		}(i)
+		}()
 	}
 
 	// Give goroutines time to execute
