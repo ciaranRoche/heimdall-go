@@ -33,7 +33,7 @@ type Provider interface {
 	// context cancellation.
 	//
 	// Parameters:
-	//   - ctx: Context for cancellation (subscription stops when cancelled)
+	//   - ctx: Context for cancellation (subscription stops when canceled)
 	//   - topic: The source topic/queue name
 	//   - handler: Function to process each message
 	Subscribe(ctx context.Context, topic string, handler MessageHandler) error

@@ -369,6 +369,14 @@ func TestMessage(t *testing.T) {
 	if msg.CorrelationID != "test-123" {
 		t.Errorf("Expected correlation ID 'test-123', got '%s'", msg.CorrelationID)
 	}
+
+	if msg.Headers["key"] != "value" {
+		t.Errorf("Expected header 'key' to be 'value', got '%v'", msg.Headers["key"])
+	}
+
+	if msg.Metadata["meta"] != "data" {
+		t.Errorf("Expected metadata 'meta' to be 'data', got '%v'", msg.Metadata["meta"])
+	}
 }
 
 func TestConcurrentOperations(t *testing.T) {
@@ -387,9 +395,9 @@ func TestConcurrentOperations(t *testing.T) {
 
 	// Test concurrent publishes
 	for i := 0; i < 10; i++ {
-		go func(i int) {
+		go func() {
 			_ = h.Publish(ctx, "test.topic", []byte("message"))
-		}(i)
+		}()
 	}
 
 	// Give goroutines time to execute

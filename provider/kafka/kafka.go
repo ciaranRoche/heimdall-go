@@ -87,9 +87,7 @@ func NewProvider(config map[string]interface{}) (provider.Provider, error) {
 	}
 
 	// Apply security configuration
-	if err := applySecurity(kafkaConfig, config); err != nil {
-		return nil, err
-	}
+	applySecurity(kafkaConfig, config)
 
 	// Create producer
 	producer, err := sarama.NewAsyncProducer(bootstrapServers, kafkaConfig)
@@ -103,7 +101,7 @@ func NewProvider(config map[string]interface{}) (provider.Provider, error) {
 	// Create consumer group
 	cg, err := sarama.NewConsumerGroup(bootstrapServers, consumerGroup, kafkaConfig)
 	if err != nil {
-		producer.Close()
+		_ = producer.Close() // Best effort cleanup
 		return nil, fmt.Errorf("failed to create Kafka consumer group: %w", err)
 	}
 
@@ -132,14 +130,12 @@ func (p *Provider) Publish(ctx context.Context, topic string, data []byte, heade
 
 	// Build Kafka headers
 	kafkaHeaders := []sarama.RecordHeader{}
-	if headers != nil {
-		for k, v := range headers {
-			if str, ok := v.(string); ok {
-				kafkaHeaders = append(kafkaHeaders, sarama.RecordHeader{
-					Key:   []byte(k),
-					Value: []byte(str),
-				})
-			}
+	for k, v := range headers {
+		if str, ok := v.(string); ok {
+			kafkaHeaders = append(kafkaHeaders, sarama.RecordHeader{
+				Key:   []byte(k),
+				Value: []byte(str),
+			})
 		}
 	}
 
@@ -206,7 +202,7 @@ func (p *Provider) Subscribe(ctx context.Context, topic string, handler provider
 				log.Printf("Kafka Provider: Error from consumer for topic %s: %v", topic, err)
 			}
 			if subCtx.Err() != nil {
-				log.Printf("Kafka Provider: Context cancelled for topic %s", topic)
+				log.Printf("Kafka Provider: Context canceled for topic %s", topic)
 				return
 			}
 			consumerHandler.ready = make(chan bool)
@@ -386,10 +382,10 @@ func extractBootstrapServers(config map[string]interface{}) ([]string, error) {
 	return nil, fmt.Errorf("bootstrap_servers must be a string array or comma-separated string")
 }
 
-func applySecurity(kafkaConfig *sarama.Config, config map[string]interface{}) error {
+func applySecurity(kafkaConfig *sarama.Config, config map[string]interface{}) {
 	protocol, ok := config["security_protocol"].(string)
 	if !ok {
-		return nil // No security configured
+		return // No security configured
 	}
 
 	switch protocol {
@@ -412,8 +408,6 @@ func applySecurity(kafkaConfig *sarama.Config, config map[string]interface{}) er
 	case "SSL":
 		kafkaConfig.Net.TLS.Enable = true
 	}
-
-	return nil
 }
 
 func getStringConfig(config map[string]interface{}, key, defaultValue string) string {
