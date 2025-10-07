@@ -235,6 +235,125 @@ func (h *Heimdall) Close() error {
 	return nil
 }
 
+// CreateTopic creates a new topic/queue with the specified configuration.
+//
+// This operation requires the underlying provider to support topic management.
+// Not all providers support this operation - check provider documentation.
+//
+// Returns provider.ErrTopicManagementNotSupported if the provider doesn't support topic management.
+func (h *Heimdall) CreateTopic(ctx context.Context, config *provider.TopicConfig) error {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if h.closed {
+		return fmt.Errorf("heimdall instance is closed")
+	}
+
+	tm, ok := h.provider.(provider.TopicManager)
+	if !ok {
+		return provider.ErrTopicManagementNotSupported
+	}
+
+	return tm.CreateTopic(ctx, config)
+}
+
+// DeleteTopic removes a topic/queue.
+//
+// This operation requires the underlying provider to support topic management.
+// Not all providers support this operation - check provider documentation.
+//
+// Returns provider.ErrTopicManagementNotSupported if the provider doesn't support topic management.
+func (h *Heimdall) DeleteTopic(ctx context.Context, topic string) error {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if h.closed {
+		return fmt.Errorf("heimdall instance is closed")
+	}
+
+	tm, ok := h.provider.(provider.TopicManager)
+	if !ok {
+		return provider.ErrTopicManagementNotSupported
+	}
+
+	return tm.DeleteTopic(ctx, topic)
+}
+
+// TopicExists checks if a topic/queue exists.
+//
+// This operation requires the underlying provider to support topic management.
+// Not all providers support this operation - check provider documentation.
+//
+// Returns provider.ErrTopicManagementNotSupported if the provider doesn't support topic management.
+func (h *Heimdall) TopicExists(ctx context.Context, topic string) (bool, error) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if h.closed {
+		return false, fmt.Errorf("heimdall instance is closed")
+	}
+
+	tm, ok := h.provider.(provider.TopicManager)
+	if !ok {
+		return false, provider.ErrTopicManagementNotSupported
+	}
+
+	return tm.TopicExists(ctx, topic)
+}
+
+// ListTopics returns a list of all topics/queues.
+//
+// This operation requires the underlying provider to support topic management.
+// Not all providers support this operation - check provider documentation.
+//
+// Returns provider.ErrTopicManagementNotSupported if the provider doesn't support topic management.
+func (h *Heimdall) ListTopics(ctx context.Context) ([]string, error) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if h.closed {
+		return nil, fmt.Errorf("heimdall instance is closed")
+	}
+
+	tm, ok := h.provider.(provider.TopicManager)
+	if !ok {
+		return nil, provider.ErrTopicManagementNotSupported
+	}
+
+	return tm.ListTopics(ctx)
+}
+
+// UpdateTopicConfig updates the configuration of an existing topic/queue.
+//
+// This operation requires the underlying provider to support topic management.
+// Not all providers support this operation - check provider documentation.
+//
+// Returns provider.ErrTopicManagementNotSupported if the provider doesn't support topic management.
+func (h *Heimdall) UpdateTopicConfig(ctx context.Context, topic string, config *provider.TopicConfig) error {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if h.closed {
+		return fmt.Errorf("heimdall instance is closed")
+	}
+
+	tm, ok := h.provider.(provider.TopicManager)
+	if !ok {
+		return provider.ErrTopicManagementNotSupported
+	}
+
+	return tm.UpdateTopicConfig(ctx, topic, config)
+}
+
+// SupportsTopicManagement returns true if the underlying provider supports topic management.
+func (h *Heimdall) SupportsTopicManagement() bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	_, ok := h.provider.(provider.TopicManager)
+	return ok
+}
+
 // getCorrelationID extracts correlation ID from message headers
 func getCorrelationID(headers map[string]interface{}) string {
 	if headers == nil {
