@@ -166,6 +166,7 @@ func (p *Provider) Publish(ctx context.Context, topic string, data []byte, heade
 }
 
 // Subscribe starts consuming messages from a Kafka topic.
+// Each subscription creates its own consumer group to avoid Kafka consumer group limitations.
 func (p *Provider) Subscribe(ctx context.Context, topic string, handler provider.MessageHandler) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -173,6 +174,31 @@ func (p *Provider) Subscribe(ctx context.Context, topic string, handler provider
 	// Check if already subscribed to this topic
 	if _, exists := p.consumers[topic]; exists {
 		return fmt.Errorf("already subscribed to topic: %s", topic)
+	}
+
+	// Extract bootstrap servers
+	bootstrapServers, err := extractBootstrapServers(p.config)
+	if err != nil {
+		return fmt.Errorf("failed to extract bootstrap servers: %w", err)
+	}
+
+	// Create Sarama config
+	kafkaConfig := sarama.NewConfig()
+	kafkaConfig.Version = sarama.V3_6_0_0
+	kafkaConfig.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.NewBalanceStrategyRange()}
+	kafkaConfig.Consumer.Offsets.Initial = sarama.OffsetOldest
+
+	// Apply security configuration
+	applySecurity(kafkaConfig, p.config)
+
+	// Create a unique consumer group for this topic to avoid blocking
+	baseConsumerGroup := getStringConfig(p.config, "consumer_group", "heimdall-consumers")
+	topicConsumerGroup := fmt.Sprintf("%s-%s", baseConsumerGroup, topic)
+
+	// Create dedicated consumer group for this topic
+	cg, err := sarama.NewConsumerGroup(bootstrapServers, topicConsumerGroup, kafkaConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create consumer group for topic %s: %w", topic, err)
 	}
 
 	// Create cancellable context for this subscription
@@ -197,8 +223,9 @@ func (p *Provider) Subscribe(ctx context.Context, topic string, handler provider
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
+		defer cg.Close() // Close this topic's consumer group when done
 		for {
-			if err := p.consumerGroup.Consume(subCtx, []string{topic}, consumerHandler); err != nil {
+			if err := cg.Consume(subCtx, []string{topic}, consumerHandler); err != nil {
 				log.Printf("Kafka Provider: Error from consumer for topic %s: %v", topic, err)
 			}
 			if subCtx.Err() != nil {
@@ -212,7 +239,7 @@ func (p *Provider) Subscribe(ctx context.Context, topic string, handler provider
 	// Wait for consumer to be ready
 	<-consumerHandler.ready
 
-	log.Printf("Kafka Provider: Subscribed to topic: %s", topic)
+	log.Printf("Kafka Provider: Subscribed to topic %s (consumer group: %s)", topic, topicConsumerGroup)
 
 	return nil
 }
