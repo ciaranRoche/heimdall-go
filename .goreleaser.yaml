@@ -1,0 +1,112 @@
+# GoReleaser configuration for heimdall-go
+# A Go messaging abstraction library for Kafka, RabbitMQ, and other providers
+version: 2
+
+# Project metadata
+project_name: heimdall-go
+
+# Skip binary builds - this is a library, not a CLI tool
+builds:
+  - skip: true
+
+# Enable source archive generation
+source:
+  enabled: true
+  name_template: '{{ .ProjectName }}-{{ .Version }}'
+  format: tar.gz
+
+# Customize changelog generation
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - 'typo'
+      - 'Merge pull request'
+      - 'Merge branch'
+  groups:
+    - title: '🚀 Features'
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: '🐛 Bug Fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: '⚡ Performance Improvements'
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: '♻️ Refactoring'
+      regexp: '^.*?refactor(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: '📝 Documentation'
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 4
+    - title: '🧪 Tests'
+      regexp: '^.*?test(\([[:word:]]+\))??!?:.+$'
+      order: 5
+    - title: 'Other Changes'
+      order: 999
+
+# GitHub release configuration
+release:
+  github:
+    owner: ciaranRoche
+    name: heimdall-go
+  draft: false
+  prerelease: auto
+  mode: append
+  header: |
+    ## Release {{ .Tag }} - {{ .Date }}
+
+    **Heimdall** is a production-ready messaging abstraction library for Go, providing a unified interface for Apache Kafka, RabbitMQ, and other messaging providers.
+
+    ### What's Changed
+  footer: |
+
+    ---
+
+    ## 📦 Installation
+
+    ```bash
+    go get github.com/ciaranRoche/heimdall-go@{{ .Tag }}
+    ```
+
+    Or add to your `go.mod`:
+    ```go
+    require github.com/ciaranRoche/heimdall-go {{ .Tag }}
+    ```
+
+    ## 📚 Documentation
+
+    - [Getting Started](https://github.com/ciaranRoche/heimdall-go#readme)
+    - [API Documentation](https://pkg.go.dev/github.com/ciaranRoche/heimdall-go@{{ .Tag }})
+    - [Examples](https://github.com/ciaranRoche/heimdall-go/tree/main/examples)
+
+    ## 🔗 Links
+
+    **Full Changelog**: https://github.com/ciaranRoche/heimdall-go/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+# Archives - include additional documentation and examples
+archives:
+  - format: tar.gz
+    name_template: '{{ .ProjectName }}-{{ .Version }}'
+    files:
+      - LICENSE
+      - README.md
+      - docs/**/*
+      - examples/**/*
+
+# Checksums for verification
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+# Announce the release (skip for snapshots/testing)
+announce:
+  skip: '{{ .IsSnapshot }}'
+
+# Metadata for builds (not used for library-only releases, but good to have)
+metadata:
+  mod_timestamp: '{{ .CommitTimestamp }}'

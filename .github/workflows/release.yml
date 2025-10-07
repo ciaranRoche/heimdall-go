@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger on semantic version tags (v1.0.0, v0.2.0, etc.)
+
+permissions:
+  contents: write  # Required for creating releases and uploading assets
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full git history required for changelog generation
+
+      - name: Fetch all tags
+        run: git fetch --force --tags
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Verify Go module
+        run: |
+          go mod download
+          go mod verify
+
+      - name: Run tests before release
+        run: |
+          echo "Running tests to ensure release quality..."
+          go test -v -race ./...
+
+      - name: Run linter
+        run: |
+          echo "Running linter checks..."
+          if command -v golangci-lint &> /dev/null; then
+            golangci-lint run --timeout=5m
+          else
+            echo "golangci-lint not found, skipping linter checks"
+          fi
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-artifacts
+          path: |
+            dist/*.tar.gz
+            dist/checksums.txt
+          retention-days: 7
