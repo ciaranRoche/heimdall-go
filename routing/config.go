@@ -142,10 +142,19 @@ func yamlConfigToEngineConfig(yc *YAMLConfig) (*Config, error) {
 
 // ruleConfigToRule converts a YAML rule config to an engine Rule.
 // nolint:unparam // error return kept for future validation logic
-func ruleConfigToRule(rc RuleConfig, _ string, ec *EntityConfig, global *GlobalSettings) (*Rule, error) {
+func ruleConfigToRule(rc RuleConfig, entityType string, ec *EntityConfig, global *GlobalSettings) (*Rule, error) {
+	// Wrap the condition to filter by entity type
+	// This ensures rules defined under "dinosaur" only match dinosaur entities
+	condition := rc.Condition.Expression
+	if entityType != "" {
+		// Prefix the condition with entity type check from event context
+		// event.entity_type is set in the routing message Event map
+		condition = fmt.Sprintf(`has(event.entity_type) && event.entity_type == "%s" && (%s)`, entityType, rc.Condition.Expression)
+	}
+
 	rule := &Rule{
 		Name:         rc.Name,
-		Condition:    rc.Condition.Expression,
+		Condition:    condition,
 		Priority:     rc.Priority,
 		StopOnMatch:  rc.StopOnMatch,
 		Destinations: make([]Destination, len(rc.Publish)),

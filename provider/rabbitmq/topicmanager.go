@@ -231,7 +231,8 @@ func (p *Provider) DeleteExchange(ctx context.Context, exchange string) error {
 
 // TopicExists checks if a RabbitMQ queue exists.
 //
-// This performs a passive queue declare to check existence without creating it.
+// Note: RabbitMQ closes the channel when QueueDeclarePassive() is called on a non-existent queue.
+// To handle this, we need to reopen the channel if it gets closed.
 func (p *Provider) TopicExists(ctx context.Context, topic string) (bool, error) {
 	if topic == "" {
 		return false, provider.ErrInvalidTopicName
@@ -251,11 +252,74 @@ func (p *Provider) TopicExists(ctx context.Context, topic string) (bool, error) 
 	)
 
 	if err != nil {
-		// Queue doesn't exist or other error
+		// Queue doesn't exist - RabbitMQ closes the channel in this case
+		// We need to reopen the channel for subsequent operations
+		if err := p.reopenChannel(); err != nil {
+			return false, fmt.Errorf("failed to reopen channel after passive declare: %w", err)
+		}
 		return false, nil
 	}
 
 	return true, nil
+}
+
+// reopenChannel reopens the RabbitMQ channel after it has been closed.
+// This is necessary because RabbitMQ closes the channel on certain errors like
+// QueueDeclarePassive on non-existent queues.
+func (p *Provider) reopenChannel() error {
+	// Check if connection is still valid
+	if p.connection == nil || p.connection.IsClosed() {
+		return fmt.Errorf("connection is closed, cannot reopen channel")
+	}
+
+	// Close old channel if it's not nil (best effort)
+	if p.channel != nil {
+		_ = p.channel.Close()
+	}
+
+	// Open new channel
+	ch, err := p.connection.Channel()
+	if err != nil {
+		return fmt.Errorf("failed to open new channel: %w", err)
+	}
+
+	// Get exchange configuration from original config
+	exchange := getStringConfig(p.config, "exchange", "heimdall.events")
+	exchangeType := getStringConfig(p.config, "exchange_type", "topic")
+	durable := getBoolConfig(p.config, "durable", true)
+
+	// Re-declare exchange on new channel
+	err = ch.ExchangeDeclare(
+		exchange,
+		exchangeType,
+		durable,
+		false, // auto-deleted
+		false, // internal
+		false, // no-wait
+		nil,   // arguments
+	)
+	if err != nil {
+		_ = ch.Close()
+		return fmt.Errorf("failed to re-declare exchange: %w", err)
+	}
+
+	// Reset QoS on new channel
+	prefetchCount := getIntConfig(p.config, "prefetch_count", 1)
+	err = ch.Qos(
+		prefetchCount,
+		0,
+		false,
+	)
+	if err != nil {
+		_ = ch.Close()
+		return fmt.Errorf("failed to set QoS on new channel: %w", err)
+	}
+
+	// Update provider's channel
+	p.channel = ch
+	log.Printf("RabbitMQ Provider: Reopened channel successfully")
+
+	return nil
 }
 
 // ExchangeExists checks if a RabbitMQ exchange exists.
@@ -279,7 +343,11 @@ func (p *Provider) ExchangeExists(ctx context.Context, exchange string, exchange
 	)
 
 	if err != nil {
-		// Exchange doesn't exist or other error
+		// Exchange doesn't exist - RabbitMQ closes the channel in this case
+		// We need to reopen the channel for subsequent operations
+		if err := p.reopenChannel(); err != nil {
+			return false, fmt.Errorf("failed to reopen channel after passive declare: %w", err)
+		}
 		return false, nil
 	}
 

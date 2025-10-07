@@ -164,15 +164,24 @@ func (p *Provider) Subscribe(ctx context.Context, topic string, handler provider
 		return fmt.Errorf("already subscribed to topic: %s", topic)
 	}
 
-	// Get queue name from config or generate one
+	// Get queue name from config or use topic name directly or generate one
+	// If use_topic_as_queue=true, consume directly from existing queue (no binding)
+	useTopicAsQueue := getBoolConfig(p.config, "use_topic_as_queue", false)
 	queueName := getStringConfig(p.config, "queue_name", "")
+
 	if queueName == "" {
-		queueName = fmt.Sprintf("heimdall.%s.%d", topic, time.Now().UnixNano())
+		if useTopicAsQueue {
+			// Use topic name as queue name for direct queue consumption
+			queueName = topic
+		} else {
+			// Generate unique queue name for topic subscription
+			queueName = fmt.Sprintf("heimdall.%s.%d", topic, time.Now().UnixNano())
+		}
 	}
 
 	durable := getBoolConfig(p.config, "durable", true)
 
-	// Declare queue
+	// Declare queue (will succeed if queue already exists with same properties)
 	queue, err := p.channel.QueueDeclare(
 		queueName,
 		durable, // durable
@@ -185,16 +194,18 @@ func (p *Provider) Subscribe(ctx context.Context, topic string, handler provider
 		return fmt.Errorf("failed to declare queue: %w", err)
 	}
 
-	// Bind queue to exchange with routing pattern
-	err = p.channel.QueueBind(
-		queue.Name,
-		topic, // routing key/pattern
-		p.exchange,
-		false,
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to bind queue: %w", err)
+	// Only bind to exchange if not using direct queue consumption
+	if !useTopicAsQueue {
+		err = p.channel.QueueBind(
+			queue.Name,
+			topic, // routing key/pattern
+			p.exchange,
+			false,
+			nil,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to bind queue: %w", err)
+		}
 	}
 
 	autoAck := getBoolConfig(p.config, "auto_ack", false)
