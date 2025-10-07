@@ -223,7 +223,11 @@ func (p *Provider) Subscribe(ctx context.Context, topic string, handler provider
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
-		defer cg.Close() // Close this topic's consumer group when done
+		defer func() {
+			if err := cg.Close(); err != nil {
+				log.Printf("Kafka Provider: Failed to close consumer group for topic %s: %v", topic, err)
+			}
+		}()
 		for {
 			if err := cg.Consume(subCtx, []string{topic}, consumerHandler); err != nil {
 				log.Printf("Kafka Provider: Error from consumer for topic %s: %v", topic, err)
