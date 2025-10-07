@@ -123,11 +123,22 @@ func (e *Engine) GetRules() []*Rule {
 }
 
 // Route evaluates routing rules and returns destinations for the message.
+// nolint:gocyclo // Complexity is justified by comprehensive callback support and error handling
 func (e *Engine) Route(ctx context.Context, msg *Message) ([]Destination, error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
 	startTime := time.Now()
+
+	// Call OnBeforeRoute callback
+	if e.config.Callbacks != nil && e.config.Callbacks.OnBeforeRoute != nil {
+		if err := e.config.Callbacks.OnBeforeRoute(ctx, msg); err != nil {
+			if e.config.Callbacks.OnRoutingError != nil {
+				e.config.Callbacks.OnRoutingError(ctx, msg, err)
+			}
+			return nil, fmt.Errorf("before route callback failed: %w", err)
+		}
+	}
 
 	// Build CEL evaluation context
 	evalCtx := map[string]any{
@@ -146,6 +157,12 @@ func (e *Engine) Route(ctx context.Context, msg *Message) ([]Destination, error)
 			if entityType, ok := msg.Event["entity_type"].(string); ok {
 				if provider, exists := e.entityProviders[entityType]; exists {
 					entityData, err := provider.GetEntity(ctx, entityID, entityType)
+
+					// Call OnEntityFetch callback
+					if e.config.Callbacks != nil && e.config.Callbacks.OnEntityFetch != nil {
+						e.config.Callbacks.OnEntityFetch(ctx, entityID, entityType, entityData, err)
+					}
+
 					if err != nil {
 						log.Printf("Routing: Failed to fetch entity data: %v", err)
 					} else {
@@ -165,12 +182,20 @@ func (e *Engine) Route(ctx context.Context, msg *Message) ([]Destination, error)
 		matched, err := e.evaluateRule(rule, evalCtx)
 		if err != nil {
 			log.Printf("Routing: Error evaluating rule %s: %v", rule.Name, err)
+			if e.config.Callbacks != nil && e.config.Callbacks.OnRoutingError != nil {
+				e.config.Callbacks.OnRoutingError(ctx, msg, err)
+			}
 			continue
 		}
 
 		if matched {
 			matchedRules = append(matchedRules, rule.Name)
 			allDestinations = append(allDestinations, rule.Destinations...)
+
+			// Call OnRuleMatch callback
+			if e.config.Callbacks != nil && e.config.Callbacks.OnRuleMatch != nil {
+				e.config.Callbacks.OnRuleMatch(ctx, msg, rule, rule.Destinations)
+			}
 
 			if rule.StopOnMatch || e.config.StopOnFirstMatch {
 				break
@@ -182,6 +207,11 @@ func (e *Engine) Route(ctx context.Context, msg *Message) ([]Destination, error)
 		elapsed := time.Since(startTime).Milliseconds()
 		log.Printf("Routing: Evaluated %d rules in %dms, matched %d rules, %d destinations",
 			len(e.rules), elapsed, len(matchedRules), len(allDestinations))
+	}
+
+	// Call OnAfterRoute callback
+	if e.config.Callbacks != nil && e.config.Callbacks.OnAfterRoute != nil {
+		e.config.Callbacks.OnAfterRoute(ctx, msg, allDestinations, nil)
 	}
 
 	return allDestinations, nil

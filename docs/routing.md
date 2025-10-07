@@ -440,6 +440,120 @@ go test -race ./routing/
 make test
 ```
 
+## Callbacks
+
+The routing engine supports lifecycle callbacks for monitoring and integration:
+
+```go
+callbacks := &routing.Callbacks{
+    OnBeforeRoute: func(ctx context.Context, msg *routing.Message) error {
+        log.Printf("Routing message from topic: %s", msg.Topic)
+        return nil
+    },
+    OnAfterRoute: func(ctx context.Context, msg *routing.Message, destinations []routing.Destination, err error) {
+        log.Printf("Routed to %d destinations", len(destinations))
+    },
+    OnRuleMatch: func(ctx context.Context, msg *routing.Message, rule *routing.Rule, destinations []routing.Destination) {
+        log.Printf("Rule matched: %s -> %v", rule.Name, destinations)
+    },
+    OnEntityFetch: func(ctx context.Context, entityID, entityType string, data map[string]any, err error) {
+        if err != nil {
+            log.Printf("Failed to fetch %s/%s: %v", entityType, entityID, err)
+        } else {
+            log.Printf("Fetched %s/%s: %v", entityType, entityID, data)
+        }
+    },
+    OnRoutingError: func(ctx context.Context, msg *routing.Message, err error) {
+        log.Printf("Routing error: %v", err)
+    },
+}
+
+config := &routing.Config{
+    Rules:     rules,
+    Callbacks: callbacks,
+}
+```
+
+### Callback Types
+
+**OnBeforeRoute**
+- Called before routing evaluation starts
+- Can return error to abort routing
+- Use for validation, preprocessing, or access control
+
+**OnAfterRoute**
+- Called after routing evaluation completes
+- Receives destinations and any error
+- Use for logging, metrics, or cleanup
+
+**OnRuleMatch**
+- Called when a rule's condition matches
+- Receives the matched rule and its destinations
+- Use for auditing or conditional actions
+
+**OnEntityFetch**
+- Called when entity data is fetched
+- Receives entity data and any fetch error
+- Use for caching, monitoring, or fallback handling
+
+**OnRoutingError**
+- Called when errors occur during routing
+- Receives the error and message context
+- Use for error tracking or alerting
+
+### Callback Example: Status Updates
+
+Update entity status based on routing results:
+
+```go
+callbacks := &routing.Callbacks{
+    OnEntityFetch: func(ctx context.Context, entityID, entityType string, data map[string]any, err error) {
+        if err != nil {
+            // Update entity status to indicate fetch failure
+            updateEntityStatus(ctx, entityID, "fetch_failed", err.Error())
+        }
+    },
+    OnRuleMatch: func(ctx context.Context, msg *routing.Message, rule *routing.Rule, destinations []routing.Destination) {
+        // Update entity with routing information
+        if entityID, ok := msg.Event["entity_id"].(string); ok {
+            updateEntityRouting(ctx, entityID, rule.Name, destinations)
+        }
+    },
+    OnRoutingError: func(ctx context.Context, msg *routing.Message, err error) {
+        // Update entity status on routing errors
+        if entityID, ok := msg.Event["entity_id"].(string); ok {
+            updateEntityStatus(ctx, entityID, "routing_error", err.Error())
+        }
+    },
+}
+```
+
+### Callback Example: Metrics Collection
+
+Collect routing metrics:
+
+```go
+var (
+    routesEvaluated = prometheus.NewCounter(...)
+    rulesMatched    = prometheus.NewCounterVec(...)
+    entityFetches   = prometheus.NewHistogram(...)
+)
+
+callbacks := &routing.Callbacks{
+    OnBeforeRoute: func(ctx context.Context, msg *routing.Message) error {
+        routesEvaluated.Inc()
+        return nil
+    },
+    OnRuleMatch: func(ctx context.Context, msg *routing.Message, rule *routing.Rule, destinations []routing.Destination) {
+        rulesMatched.WithLabelValues(rule.Name).Inc()
+    },
+    OnEntityFetch: func(ctx context.Context, entityID, entityType string, data map[string]any, err error) {
+        duration := time.Since(start).Seconds()
+        entityFetches.Observe(duration)
+    },
+}
+```
+
 ## CEL Documentation
 
 For more information on CEL expressions, see:
