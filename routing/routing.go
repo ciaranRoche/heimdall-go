@@ -120,6 +120,27 @@ type Config struct {
 
 	// EnableMetrics enables routing metrics collection
 	EnableMetrics bool
+
+	// Callbacks for routing lifecycle events
+	Callbacks *Callbacks
+}
+
+// Callbacks defines callback functions for routing lifecycle events.
+type Callbacks struct {
+	// OnBeforeRoute is called before routing evaluation starts
+	OnBeforeRoute func(ctx context.Context, msg *Message) error
+
+	// OnAfterRoute is called after routing evaluation completes
+	OnAfterRoute func(ctx context.Context, msg *Message, destinations []Destination, err error)
+
+	// OnRuleMatch is called when a rule matches
+	OnRuleMatch func(ctx context.Context, msg *Message, rule *Rule, destinations []Destination)
+
+	// OnEntityFetch is called when entity data is fetched
+	OnEntityFetch func(ctx context.Context, entityID, entityType string, data map[string]any, err error)
+
+	// OnRoutingError is called when an error occurs during routing
+	OnRoutingError func(ctx context.Context, msg *Message, err error)
 }
 
 // Validate checks if the routing rule is valid.
