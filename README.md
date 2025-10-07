@@ -13,9 +13,25 @@ A production-ready messaging abstraction library for Go, providing unified inter
 
 ## Installation
 
+Install the latest version:
+
 ```bash
-go get github.com/ciaranRoche/heimdall-go
+go get github.com/ciaranRoche/heimdall-go@latest
 ```
+
+Or install a specific version:
+
+```bash
+go get github.com/ciaranRoche/heimdall-go@v0.2.0
+```
+
+Add to your `go.mod`:
+
+```go
+require github.com/ciaranRoche/heimdall-go v0.2.0
+```
+
+**Releases**: See [GitHub Releases](https://github.com/ciaranRoche/heimdall-go/releases) for version history and changelogs.
 
 ## Quick Start
 
